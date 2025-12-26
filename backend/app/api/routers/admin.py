@@ -24,7 +24,12 @@ from ...schemas.novel import (
     NovelSectionResponse,
     NovelSectionType,
 )
-from ...schemas.user import PasswordChangeRequest, User as UserSchema
+from ...schemas.user import (
+    PasswordChangeRequest,
+    User as UserSchema,
+    UserCreateAdmin,
+    UserUpdateAdmin,
+)
 from ...services.auth_service import AuthService
 from ...services.admin_setting_service import AdminSettingService
 from ...services.config_service import ConfigService
@@ -86,6 +91,65 @@ async def list_users(
     users = await service.list_users()
     logger.info("管理员请求用户列表，共 %s 条", len(users))
     return [UserSchema.model_validate(user) for user in users]
+
+
+@router.post("/users", response_model=UserSchema, status_code=status.HTTP_201_CREATED)
+async def create_user(
+    payload: UserCreateAdmin,
+    service: UserService = Depends(get_user_service),
+    current_admin=Depends(get_current_admin),
+) -> UserSchema:
+    try:
+        user = await service.create_user_admin(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    logger.info("管理员 %s 创建用户：%s", current_admin.username, user.id)
+    return UserSchema.model_validate(user)
+
+
+@router.get("/users/{user_id}", response_model=UserSchema)
+async def get_user(
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    _: None = Depends(get_current_admin),
+) -> UserSchema:
+    user = await service.get_user(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    return UserSchema.model_validate(user)
+
+
+@router.patch("/users/{user_id}", response_model=UserSchema)
+async def update_user(
+    user_id: int,
+    payload: UserUpdateAdmin,
+    service: UserService = Depends(get_user_service),
+    current_admin=Depends(get_current_admin),
+) -> UserSchema:
+    try:
+        user = await service.update_user_admin(user_id, payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+    logger.info("管理员 %s 更新用户：%s", current_admin.username, user_id)
+    return UserSchema.model_validate(user)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_user(
+    user_id: int,
+    service: UserService = Depends(get_user_service),
+    current_admin=Depends(get_current_admin),
+) -> None:
+    try:
+        deleted = await service.delete_user(user_id)
+        if not deleted:
+            raise HTTPException(status_code=404, detail="用户不存在")
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    logger.info("管理员 %s 删除用户：%s", current_admin.username, user_id)
 
 
 @router.get("/novel-projects", response_model=List[AdminNovelSummary])

@@ -53,6 +53,23 @@ export interface AdminUser {
   username: string
   email?: string | null
   is_admin: boolean
+  is_active: boolean
+}
+
+export interface UserCreatePayload {
+  username: string
+  email?: string
+  password: string
+  is_admin?: boolean
+  is_active?: boolean
+}
+
+export interface UserUpdatePayload {
+  username?: string
+  email?: string
+  password?: string
+  is_admin?: boolean
+  is_active?: boolean
 }
 
 export interface NovelProjectSummary {
@@ -150,6 +167,30 @@ export class AdminAPI {
   // Users
   static listUsers(): Promise<AdminUser[]> {
     return this.request('/users')
+  }
+
+  static createUser(payload: UserCreatePayload): Promise<AdminUser> {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+  }
+
+  static getUser(id: number): Promise<AdminUser> {
+    return this.request(`/users/${id}`)
+  }
+
+  static updateUser(id: number, payload: UserUpdatePayload): Promise<AdminUser> {
+    return this.request(`/users/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(payload)
+    })
+  }
+
+  static deleteUser(id: number): Promise<void> {
+    return this.request(`/users/${id}`, {
+      method: 'DELETE'
+    })
   }
 
   // Novels

@@ -79,6 +79,9 @@ class Blueprint(BaseModel):
     characters: List[Dict[str, Any]] = []
     relationships: List[Relationship] = []
     chapter_outline: List[ChapterOutline] = []
+    
+    class Config:
+        from_attributes = True
 
 
 class NovelProject(BaseModel):

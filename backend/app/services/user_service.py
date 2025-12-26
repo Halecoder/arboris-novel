@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..core.security import hash_password
 from ..models import User
 from ..repositories.user_repository import UserRepository
-from ..schemas.user import UserCreate, UserInDB
+from ..schemas.user import UserCreate, UserCreateAdmin, UserInDB, UserUpdateAdmin
 
 
 class UserService:
@@ -60,3 +60,55 @@ class UserService:
 
     async def get_daily_request(self, user_id: int) -> int:
         return await self.repo.get_daily_request(user_id)
+
+    async def create_user_admin(self, payload: UserCreateAdmin) -> UserInDB:
+        if payload.is_admin:
+            raise ValueError("不允许直接创建管理员账号")
+            
+        hashed_password = hash_password(payload.password)
+        user = User(
+            username=payload.username,
+            email=payload.email,
+            hashed_password=hashed_password,
+            is_admin=False,  # 强制为 False
+            is_active=payload.is_active,
+        )
+
+        self.session.add(user)
+        try:
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ValueError("用户名或邮箱已存在") from exc
+
+        return UserInDB.model_validate(user)
+
+    async def update_user_admin(self, user_id: int, payload: UserUpdateAdmin) -> Optional[UserInDB]:
+        user = await self.repo.get(id=user_id)
+        if not user:
+            return None
+
+        update_data = payload.model_dump(exclude_unset=True)
+        if "password" in update_data and update_data["password"]:
+            update_data["hashed_password"] = hash_password(update_data.pop("password"))
+
+        await self.repo.update_fields(user, **update_data)
+        try:
+            await self.session.commit()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ValueError("用户名或邮箱已存在") from exc
+            
+        return UserInDB.model_validate(user)
+
+    async def delete_user(self, user_id: int) -> bool:
+        user = await self.repo.get(id=user_id)
+        if not user:
+            return False
+            
+        if user.is_admin:
+            raise ValueError("无法删除管理员账号")
+            
+        await self.repo.delete(user)
+        await self.session.commit()
+        return True

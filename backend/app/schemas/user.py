@@ -22,11 +22,27 @@ class UserUpdate(BaseModel):
     password: Optional[str] = Field(default=None, min_length=6, description="新密码")
 
 
+class UserCreateAdmin(UserCreate):
+    """管理员创建用户模型。"""
+
+    is_admin: bool = Field(default=False, description="是否为管理员")
+    is_active: bool = Field(default=True, description="是否激活")
+
+
+class UserUpdateAdmin(UserUpdate):
+    """管理员更新用户信息模型。"""
+
+    username: Optional[str] = Field(default=None, description="用户名")
+    is_admin: Optional[bool] = Field(default=None, description="是否为管理员")
+    is_active: Optional[bool] = Field(default=None, description="是否激活")
+
+
 class User(UserBase):
     """对外暴露的用户信息。"""
 
     id: int = Field(..., description="用户主键")
     is_admin: bool = Field(default=False, description="是否为管理员")
+    is_active: bool = Field(default=True, description="是否激活")
     must_change_password: bool = Field(default=False, description="是否需要强制修改密码")
 
     class Config:
