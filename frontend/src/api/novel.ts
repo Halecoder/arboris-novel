@@ -141,7 +141,7 @@ export interface DeleteNovelsResponse {
   message: string
 }
 
-export type NovelSectionType = 'overview' | 'world_setting' | 'characters' | 'relationships' | 'chapter_outline' | 'chapters'
+export type NovelSectionType = 'overview' | 'world_setting' | 'characters' | 'relationships' | 'chapter_outline' | 'chapters' | 'emotion_curve' | 'foreshadowing'
 
 export interface NovelSectionResponse {
   section: NovelSectionType
