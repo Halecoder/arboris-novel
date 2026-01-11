@@ -33,7 +33,7 @@
 import { ref, watch, defineProps, defineEmits } from 'vue';
 import ChapterOutlineEditor from './ChapterOutlineEditor.vue';
 import KeyLocationsEditor from './KeyLocationsEditor.vue';
-import CharactersEditor from './CharactersEditor.vue';
+import CharactersEditor from './CharactersEditorEnhanced.vue';
 import RelationshipsEditor from './RelationshipsEditor.vue';
 import FactionsEditor from './FactionsEditor.vue';
 import type { ChapterOutline } from '@/api/novel';

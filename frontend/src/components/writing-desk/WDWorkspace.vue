@@ -374,7 +374,10 @@ const currentComponentProps = computed(() => {
     }
   }
   if (selectedChapter.value?.content) {
-    return { selectedChapter: selectedChapter.value }
+    return { 
+      selectedChapter: selectedChapter.value,
+      projectId: props.project?.id
+    }
   }
   if (isChapterFailed(props.selectedChapterNumber)) {
     return {
