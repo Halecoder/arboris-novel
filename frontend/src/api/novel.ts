@@ -307,3 +307,62 @@ export class NovelAPI {
     })
   }
 }
+
+
+// 优化相关类型定义
+export interface EmotionBeat {
+  primary_emotion: string
+  intensity: number
+  curve: {
+    start: number
+    peak: number
+    end: number
+  }
+  turning_point: string
+}
+
+export interface OptimizeRequest {
+  project_id: string
+  chapter_number: number
+  dimension: 'dialogue' | 'environment' | 'psychology' | 'rhythm'
+  additional_notes?: string
+}
+
+export interface OptimizeResponse {
+  optimized_content: string
+  optimization_notes: string
+  dimension: string
+}
+
+// 优化API
+const OPTIMIZER_BASE = `${API_BASE_URL}${API_PREFIX}/optimizer`
+
+export class OptimizerAPI {
+  /**
+   * 对章节内容进行分层优化
+   */
+  static async optimizeChapter(request: OptimizeRequest): Promise<OptimizeResponse> {
+    return request(`${OPTIMIZER_BASE}/optimize`, {
+      method: 'POST',
+      body: JSON.stringify(request)
+    })
+  }
+
+  /**
+   * 应用优化后的内容到章节
+   */
+  static async applyOptimization(
+    projectId: string,
+    chapterNumber: number,
+    optimizedContent: string
+  ): Promise<{ status: string; message: string }> {
+    const params = new URLSearchParams({
+      project_id: projectId,
+      chapter_number: chapterNumber.toString(),
+      optimized_content: optimizedContent
+    })
+    return request(`${OPTIMIZER_BASE}/apply-optimization?${params}`, {
+      method: 'POST'
+    })
+  }
+}
