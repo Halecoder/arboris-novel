@@ -1,4 +1,3 @@
-<!-- AIMETA P=情感曲线区_情感分析图表|R=情感曲线图|NR=不含分析逻辑|E=component:EmotionCurveSection|X=ui|A=曲线组件|D=vue,chart.js|S=dom,net|RD=./README.ai -->
 <template>
   <div class="emotion-curve-section">
     <!-- Header -->
@@ -420,12 +419,12 @@ const initChart = () => {
   });
 };
 
-const useAIAnalysis = () => {
-  fetchEmotionData(true);
+const refreshData = () => {
+  fetchEmotionData(false);
 };
 
-const refreshData = () => {
-  fetchEmotionData();
+const useAIAnalysis = () => {
+  fetchEmotionData(true);
 };
 
 onMounted(() => {
