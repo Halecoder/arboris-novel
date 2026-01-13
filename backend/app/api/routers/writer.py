@@ -346,10 +346,46 @@ async def evaluate_chapter(
     llm_service = LLMService(session)
 
     project = await novel_service.ensure_project_owner(project_id, current_user.id)
-    chapter = await novel_service.get_or_create_chapter(project_id, request.chapter_number)
+    # 确保预加载 selected_version 关系
+    from sqlalchemy.orm import selectinload
+    stmt = (
+        select(Chapter)
+        .options(selectinload(Chapter.selected_version))
+        .where(
+            Chapter.project_id == project_id,
+            Chapter.chapter_number == request.chapter_number,
+        )
+    )
+    result = await session.execute(stmt)
+    chapter = result.scalars().first()
+    
+    if not chapter:
+        chapter = await novel_service.get_or_create_chapter(project_id, request.chapter_number)
 
-    if not chapter.selected_version or not chapter.selected_version.content:
-        raise HTTPException(status_code=400, detail="请先选择一个版本再进行评审")
+    # 如果没有选中版本，使用最新版本进行评审
+    version_to_evaluate = chapter.selected_version
+    if not version_to_evaluate:
+        # 获取该章节的所有版本，选择最新的一个
+        from sqlalchemy.orm import selectinload
+        stmt_versions = (
+            select(Chapter)
+            .options(selectinload(Chapter.versions))
+            .where(
+                Chapter.project_id == project_id,
+                Chapter.chapter_number == request.chapter_number,
+            )
+        )
+        result_versions = await session.execute(stmt_versions)
+        chapter_with_versions = result_versions.scalars().first()
+        
+        if not chapter_with_versions or not chapter_with_versions.versions:
+            raise HTTPException(status_code=400, detail="该章节还没有生成任何版本，无法进行评审")
+        
+        # 使用最新的版本（列表中的最后一个）
+        version_to_evaluate = chapter_with_versions.versions[-1]
+    
+    if not version_to_evaluate or not version_to_evaluate.content:
+        raise HTTPException(status_code=400, detail="版本内容为空，无法进行评审")
 
     chapter.status = "evaluating"
     await session.commit()
@@ -357,26 +393,79 @@ async def evaluate_chapter(
     eval_prompt = await prompt_service.get_prompt("evaluation")
     if not eval_prompt:
         logger.warning("未配置名为 'evaluation' 的评审提示词，将跳过 AI 评审")
-        chapter.evaluation = "未配置评审提示词"
-        chapter.status = "successful"
+        # 创建评审记录
+        from app.models.novel import ChapterEvaluation
+        evaluation_record = ChapterEvaluation(
+            chapter_id=chapter.id,
+            version_id=version_to_evaluate.id,
+            decision="skipped",
+            feedback="未配置评审提示词",
+            score=None
+        )
+        session.add(evaluation_record)
+        # 跳过评审时，恢复为原来的状态，而不是 successful
+        chapter.status = "successful"  # 恢复为生成成功状态
         await session.commit()
         return await _load_project_schema(novel_service, project_id, current_user.id)
 
+    from app.models.novel import ChapterEvaluation
     try:
         evaluation_raw = await llm_service.get_llm_response(
             system_prompt=eval_prompt,
-            conversation_history=[{"role": "user", "content": chapter.selected_version.content}],
+            conversation_history=[{"role": "user", "content": version_to_evaluate.content}],
             temperature=0.3,
             user_id=current_user.id,
         )
-        chapter.evaluation = remove_think_tags(evaluation_raw)
+        evaluation_text = remove_think_tags(evaluation_raw)
+        
+        # 校验 AI 返回的内容不为空
+        if not evaluation_text or len(evaluation_text.strip()) == 0:
+            raise ValueError("评审结果为空")
+        
+        # 创建评审记录
+        evaluation_record = ChapterEvaluation(
+            chapter_id=chapter.id,
+            version_id=version_to_evaluate.id,
+            decision="reviewed",
+            feedback=evaluation_text,
+            score=None  # 可以后续添加评分逻辑
+        )
+        session.add(evaluation_record)
         chapter.status = "successful"
+        await session.commit()
+        logger.info("项目 %s 第 %s 章评审成功", project_id, request.chapter_number)
     except Exception as exc:
         logger.exception("项目 %s 第 %s 章评审失败: %s", project_id, request.chapter_number, exc)
-        chapter.evaluation = f"评审失败: {str(exc)}"
-        chapter.status = "evaluation_failed"
-
-    await session.commit()
+        # 回滚事务，恢复状态
+        await session.rollback()
+        
+        # 重新加载 chapter 对象（因为 rollback 后对象已脱离 session）
+        stmt = (
+            select(Chapter)
+            .where(
+                Chapter.project_id == project_id,
+                Chapter.chapter_number == request.chapter_number,
+            )
+        )
+        result = await session.execute(stmt)
+        chapter = result.scalars().first()
+        
+        if chapter:
+            # 创建失败记录
+            evaluation_record = ChapterEvaluation(
+                chapter_id=chapter.id,
+                version_id=version_to_evaluate.id,
+                decision="failed",
+                feedback=f"评审失败: {str(exc)}",
+                score=None
+            )
+            session.add(evaluation_record)
+            chapter.status = "evaluation_failed"
+            await session.commit()
+        
+        # 抛出异常，让前端知道评审失败
+        raise HTTPException(status_code=500, detail=f"评审失败: {str(exc)}")
+    
     return await _load_project_schema(novel_service, project_id, current_user.id)
 
 
