@@ -1,8 +1,9 @@
+# AIMETA P=数据库初始化_创建表和默认数据|R=创建表_初始化管理员|NR=不含业务逻辑|E=init_db|X=internal|A=初始化函数|D=sqlalchemy|S=db|RD=./README.ai
 import logging
 
 from pathlib import Path
 
-from sqlalchemy import select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -26,6 +27,7 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("数据库表结构已初始化")
+    await _ensure_schema_updates()
 
     # ---- 第二步：确保管理员账号至少存在一个 ----
     async with AsyncSessionLocal() as session:
@@ -104,6 +106,17 @@ async def _ensure_database_exists() -> None:
     async with admin_engine.begin() as conn:
         await conn.execute(text(f"CREATE DATABASE IF NOT EXISTS `{database}`"))
     await admin_engine.dispose()
+
+
+async def _ensure_schema_updates() -> None:
+    """补齐历史版本缺失的列，避免旧库在新版本报错。"""
+    async with engine.begin() as conn:
+        def _upgrade(sync_conn):
+            inspector = inspect(sync_conn)
+            columns = {col["name"] for col in inspector.get_columns("chapter_outlines")}
+            if "metadata" not in columns:
+                sync_conn.execute(text("ALTER TABLE chapter_outlines ADD COLUMN metadata JSON"))
+        await conn.run_sync(_upgrade)
 
 
 async def _ensure_default_prompts(session: AsyncSession) -> None:

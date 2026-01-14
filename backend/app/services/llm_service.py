@@ -1,3 +1,4 @@
+# AIMETA P=LLM服务_大模型调用封装|R=API调用_流式生成|NR=不含业务逻辑|E=LLMService|X=internal|A=服务类|D=openai,httpx|S=net|RD=./README.ai
 import logging
 import os
 from typing import Any, Dict, List, Optional
@@ -44,6 +45,8 @@ class LLMService:
         user_id: Optional[int] = None,
         timeout: float = 300.0,
         response_format: Optional[str] = "json_object",
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
     ) -> str:
         messages = [{"role": "system", "content": system_prompt}, *conversation_history]
         return await self._stream_and_collect(
@@ -52,6 +55,32 @@ class LLMService:
             user_id=user_id,
             timeout=timeout,
             response_format=response_format,
+            max_tokens=max_tokens,
+            top_p=top_p,
+        )
+
+    async def generate(
+        self,
+        prompt: str,
+        *,
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        user_id: Optional[int] = None,
+        timeout: float = 300.0,
+        max_tokens: Optional[int] = None,
+        response_format: Optional[str] = None,
+        top_p: Optional[float] = None,
+    ) -> str:
+        """兼容旧版接口的文本生成入口，统一走 get_llm_response。"""
+        return await self.get_llm_response(
+            system_prompt=system_prompt or "你是一位专业写作助手。",
+            conversation_history=[{"role": "user", "content": prompt}],
+            temperature=temperature,
+            user_id=user_id,
+            timeout=timeout,
+            response_format=response_format,
+            max_tokens=max_tokens,
+            top_p=top_p,
         )
 
     async def get_summary(
@@ -83,6 +112,8 @@ class LLMService:
         user_id: Optional[int],
         timeout: float,
         response_format: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
     ) -> str:
         config = await self._resolve_llm_config(user_id)
         client = LLMClient(api_key=config["api_key"], base_url=config.get("base_url"))
@@ -106,6 +137,8 @@ class LLMService:
                 temperature=temperature,
                 timeout=int(timeout),
                 response_format=response_format,
+                max_tokens=max_tokens,
+                top_p=top_p,
             ):
                 if part.get("content"):
                     full_response += part["content"]

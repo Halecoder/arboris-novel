@@ -1,3 +1,4 @@
+# AIMETA P=应用配置_环境变量加载和设置类|R=配置加载_环境变量|NR=不含业务逻辑|E=settings|X=internal|A=Settings类|D=pydantic|S=fs|RD=./README.ai
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -55,6 +56,11 @@ class Settings(BaseSettings):
     mysql_user: str = Field(default="root", env="MYSQL_USER", description="MySQL 用户名")
     mysql_password: str = Field(default="", env="MYSQL_PASSWORD", description="MySQL 密码")
     mysql_database: str = Field(default="arboris", env="MYSQL_DATABASE", description="MySQL 数据库名称")
+    sqlite_db_path: Optional[str] = Field(
+        default=None,
+        env="SQLITE_DB_PATH",
+        description="SQLite 数据库文件路径（支持绝对或相对路径）",
+    )
 
     # -------------------- 管理员初始化配置 --------------------
     admin_default_username: str = Field(default="admin", env="ADMIN_DEFAULT_USERNAME", description="默认管理员用户名")
@@ -226,9 +232,15 @@ class Settings(BaseSettings):
             return normalized.render_as_string(hide_password=False)
 
         if self.db_provider == "sqlite":
-            # SQLite 固定使用 storage/arboris.db，并转换为绝对路径以避免运行目录差异
             project_root = Path(__file__).resolve().parents[2]
-            db_path = (project_root / "storage" / "arboris.db").resolve()
+            sqlite_path = (self.sqlite_db_path or "").strip()
+            if sqlite_path:
+                db_path = Path(sqlite_path).expanduser()
+                if not db_path.is_absolute():
+                    db_path = (project_root / db_path).resolve()
+            else:
+                # SQLite 默认使用 storage/arboris.db，并转换为绝对路径以避免运行目录差异
+                db_path = (project_root / "storage" / "arboris.db").resolve()
             return f"sqlite+aiosqlite:///{db_path}"
 
         # MySQL 分支：统一对密码进行 URL 编码，避免特殊字符破坏连接串
