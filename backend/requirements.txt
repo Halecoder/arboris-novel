@@ -15,6 +15,7 @@ openai==2.3.0
 httpx==0.28.1
 email-validator==2.1.1
 cryptography>=41.0.0
+redis==5.0.7
 libsql-client==0.3.1
 ollama==0.6.0
 langchain-text-splitters==0.3.11

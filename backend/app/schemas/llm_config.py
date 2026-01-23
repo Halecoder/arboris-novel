@@ -1,3 +1,4 @@
+# AIMETA P=LLM配置模式_模型配置请求响应|R=LLM配置结构|NR=不含业务逻辑|E=LLMConfigSchema|X=internal|A=Pydantic模式|D=pydantic|S=none|RD=./README.ai
 from typing import Optional
 
 from pydantic import BaseModel, HttpUrl, Field
@@ -18,3 +19,8 @@ class LLMConfigRead(LLMConfigBase):
 
     class Config:
         from_attributes = True
+
+
+class ModelListRequest(BaseModel):
+    llm_provider_url: Optional[str] = Field(default=None, description="LLM 服务地址")
+    llm_provider_api_key: str = Field(..., description="LLM API Key")

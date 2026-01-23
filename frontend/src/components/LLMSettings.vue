@@ -1,3 +1,4 @@
+<!-- AIMETA P=LLM设置_模型配置界面|R=LLM配置表单|NR=不含模型调用|E=component:LLMSettings|X=internal|A=设置组件|D=vue|S=dom,net|RD=./README.ai -->
 <template>
   <div class="bg-white/70 backdrop-blur-xl rounded-2xl shadow-lg p-8">
     <h2 class="text-2xl font-bold text-gray-800 mb-6">LLM 配置</h2>
@@ -64,23 +65,56 @@
       </div>
       <div>
         <label for="model" class="block text-sm font-medium text-gray-700">Model</label>
-        <div class="relative mt-1">
-          <input
-            type="text"
-            id="model"
-            v-model="config.llm_provider_model"
-            class="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-            placeholder="留空则使用默认模型"
-          >
+        <div class="flex gap-2 mt-1">
+          <div class="relative flex-1">
+            <input
+              type="text"
+              id="model"
+              v-model="config.llm_provider_model"
+              @focus="showModelDropdown = true"
+              @blur="hideDropdown"
+              class="block w-full px-3 py-2 pr-10 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+              placeholder="留空则使用默认模型"
+            >
+            <button
+              type="button"
+              @click="clearApiModel"
+              class="absolute inset-y-0 right-2 flex items-center px-2 text-gray-400 hover:text-gray-600"
+              aria-label="清空模型名称"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+              </svg>
+            </button>
+            <!-- 下拉选择提示框 -->
+            <div
+              v-if="showModelDropdown && availableModels.length > 0"
+              class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto"
+            >
+              <div
+                v-for="model in filteredModels"
+                :key="model"
+                @mousedown="selectModel(model)"
+                class="px-3 py-2 cursor-pointer hover:bg-indigo-50 hover:text-indigo-600 text-sm"
+              >
+                {{ model }}
+              </div>
+              <div v-if="filteredModels.length === 0" class="px-3 py-2 text-sm text-gray-500">
+                无匹配的模型
+              </div>
+            </div>
+          </div>
           <button
             type="button"
-            @click="clearApiModel"
-            class="absolute inset-y-0 right-2 flex items-center px-2 text-gray-400 hover:text-gray-600"
-            aria-label="清空模型名称"
+            @click="loadModels"
+            :disabled="isLoadingModels"
+            class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <svg class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            <svg v-if="isLoadingModels" class="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
+            <span>{{ isLoadingModels ? '加载中...' : '获取模型' }}</span>
           </button>
         </div>
       </div>
@@ -93,8 +127,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
-import { getLLMConfig, createOrUpdateLLMConfig, deleteLLMConfig, type LLMConfigCreate } from '@/api/llm';
+import { ref, onMounted, computed } from 'vue';
+import { getLLMConfig, createOrUpdateLLMConfig, deleteLLMConfig, getAvailableModels, type LLMConfigCreate } from '@/api/llm';
 
 const config = ref<LLMConfigCreate>({
   llm_provider_url: '',
@@ -103,6 +137,20 @@ const config = ref<LLMConfigCreate>({
 });
 
 const showApiKey = ref(false);
+const availableModels = ref<string[]>([]);
+const isLoadingModels = ref(false);
+const showModelDropdown = ref(false);
+
+// 根据输入过滤模型列表
+const filteredModels = computed(() => {
+  if (!config.value.llm_provider_model) {
+    return availableModels.value;
+  }
+  const searchTerm = config.value.llm_provider_model.toLowerCase();
+  return availableModels.value.filter(model =>
+    model.toLowerCase().includes(searchTerm)
+  );
+});
 
 onMounted(async () => {
   const existingConfig = await getLLMConfig();
@@ -146,5 +194,44 @@ const clearApiUrl = () => {
 
 const clearApiModel = () => {
   config.value.llm_provider_model = '';
+};
+
+const loadModels = async () => {
+  // 验证表单
+  if (!config.value.llm_provider_api_key) {
+    alert('请先填写 API Key');
+    return;
+  }
+
+  isLoadingModels.value = true;
+  try {
+    const models = await getAvailableModels({
+      llm_provider_api_key: config.value.llm_provider_api_key,
+      llm_provider_url: config.value.llm_provider_url || undefined,
+    });
+    availableModels.value = models;
+    if (models.length > 0) {
+      showModelDropdown.value = true;
+    } else {
+      alert('未获取到模型列表，请检查API配置是否正确');
+    }
+  } catch (error) {
+    console.error('Failed to load models:', error);
+    alert('获取模型列表失败，请检查网络连接和API配置');
+  } finally {
+    isLoadingModels.value = false;
+  }
+};
+
+const selectModel = (model: string) => {
+  config.value.llm_provider_model = model;
+  showModelDropdown.value = false;
+};
+
+const hideDropdown = () => {
+  // 延迟隐藏，确保点击事件能触发
+  setTimeout(() => {
+    showModelDropdown.value = false;
+  }, 200);
 };
 </script>

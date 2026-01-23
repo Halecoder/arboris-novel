@@ -1,3 +1,4 @@
+# AIMETA P=小说模型_项目和章节定义|R=小说表_章节表_版本表|NR=不含业务逻辑|E=Novel_Chapter_ChapterVersion|X=internal|A=ORM模型|D=sqlalchemy|S=none|RD=./README.ai
 from __future__ import annotations
 
 from datetime import datetime
@@ -134,7 +135,7 @@ class BlueprintRelationship(Base):
 
 
 class ChapterOutline(Base):
-    """章节纲要。"""
+    """章节纲要，支持 metadata 存储导演脚本/节拍状态等信息。"""
 
     __tablename__ = "chapter_outlines"
 
@@ -143,6 +144,8 @@ class ChapterOutline(Base):
     chapter_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[Optional[str]] = mapped_column(Text)
+    metadata_: Mapped[Optional[dict]] = mapped_column("metadata", JSON)  # 存储导演脚本/节拍状态
+    metadata = _MetadataAccessor()
 
     project: Mapped[NovelProject] = relationship(back_populates="outlines")
 

@@ -1,3 +1,4 @@
+# AIMETA P=小说服务_小说管理业务逻辑|R=小说CRUD_章节管理|NR=不含内容生成|E=NovelService|X=internal|A=服务类|D=sqlalchemy|S=db|RD=./README.ai
 from __future__ import annotations
 
 import json
@@ -56,7 +57,10 @@ def _clean_string(text: str, parse_json: bool = True) -> str:
     stripped = text.strip()
     if not stripped:
         return stripped
-    if parse_json and stripped.startswith("{") and stripped.endswith("}"):
+    if parse_json and (
+        (stripped.startswith("{") and stripped.endswith("}"))
+        or (stripped.startswith("[") and stripped.endswith("]"))
+    ):
         try:
             parsed = json.loads(stripped)
             coerced = _coerce_text(parsed)
@@ -75,6 +79,7 @@ def _clean_string(text: str, parse_json: bool = True) -> str:
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import (
@@ -384,9 +389,42 @@ class NovelService:
         result = await self.session.execute(stmt)
         return result.scalars().first()
 
+    async def update_or_create_outline(
+        self,
+        project_id: str,
+        chapter_number: int,
+        title: str,
+        summary: str,
+        metadata: Optional[dict] = None,
+    ) -> ChapterOutline:
+        """更新或创建章节大纲，支持 metadata 存储导演脚本等信息。"""
+        stmt = select(ChapterOutline).where(
+            ChapterOutline.project_id == project_id,
+            ChapterOutline.chapter_number == chapter_number,
+        )
+        result = await self.session.execute(stmt)
+        outline = result.scalars().first()
+        if outline:
+            outline.title = title
+            outline.summary = summary
+            if metadata is not None:
+                outline.metadata = metadata
+        else:
+            outline = ChapterOutline(
+                project_id=project_id,
+                chapter_number=chapter_number,
+                title=title,
+                summary=summary,
+                metadata=metadata,
+            )
+            self.session.add(outline)
+        await self.session.flush()
+        return outline
+
     async def get_or_create_chapter(self, project_id: str, chapter_number: int) -> Chapter:
         stmt = (
             select(Chapter)
+            .options(selectinload(Chapter.selected_version))
             .where(
                 Chapter.project_id == project_id,
                 Chapter.chapter_number == chapter_number,
@@ -411,7 +449,7 @@ class NovelService:
             version = ChapterVersion(
                 chapter_id=chapter.id,
                 content=text_content,
-                metadata=None,
+                metadata=extra,  # ✅ 落盘 metadata
                 version_label=f"v{index+1}",
             )
             self.session.add(version)
@@ -430,6 +468,11 @@ class NovelService:
         if not versions or version_index < 0 or version_index >= len(versions):
             raise HTTPException(status_code=400, detail="版本索引无效")
         selected = versions[version_index]
+        
+        # 校验内容是否为空
+        if not selected.content or len(selected.content.strip()) == 0:
+            raise HTTPException(status_code=400, detail="选中的版本内容为空，无法确认为最终版")
+        
         chapter.selected_version_id = selected.id
         chapter.status = ChapterGenerationStatus.SUCCESSFUL.value
         chapter.word_count = len(selected.content or "")
